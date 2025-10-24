@@ -1,0 +1,215 @@
+/**
+ * FULL SINGLE-FILE BLOGGING PLATFORM (Node.js + Express)
+ * Features:
+ *  - Create, View, and Delete posts
+ *  - Persistent JSON storage (posts.json)
+ *  - All HTML, CSS, JS inline in one file
+ *
+ * Run:
+ *   npm install express body-parser fs-extra
+ *   node app.js
+ * Then open: http://localhost:3000
+ */
+
+const express = require("express");
+const bodyParser = require("body-parser");
+const fs = require("fs-extra");
+const path = require("path");
+const app = express();
+const PORT = 3000;
+
+const DATA_FILE = path.join(__dirname, "posts.json");
+
+// ensure file exists
+if (!fs.existsSync(DATA_FILE)) fs.writeJSONSync(DATA_FILE, []);
+
+// middleware
+app.use(bodyParser.urlencoded({ extended: true }));
+
+// load posts
+function getPosts() {
+  return fs.readJSONSync(DATA_FILE);
+}
+
+// save posts
+function savePosts(posts) {
+  fs.writeJSONSync(DATA_FILE, posts, { spaces: 2 });
+}
+
+// serve main page
+app.get("/", (req, res) => {
+  const posts = getPosts();
+  res.send(`
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Node.js Single-File Blog</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: #f2f4f8;
+      margin: 0;
+      padding: 0;
+    }
+    header {
+      background: #333;
+      color: #fff;
+      text-align: center;
+      padding: 1rem;
+      letter-spacing: 1px;
+    }
+    main {
+      width: 90%;
+      max-width: 800px;
+      margin: 2rem auto;
+      background: #fff;
+      padding: 2rem;
+      border-radius: 10px;
+      box-shadow: 0 0 15px rgba(0,0,0,0.1);
+    }
+    h1, h2 {
+      margin-top: 0;
+    }
+    form {
+      margin-bottom: 2rem;
+    }
+    input, textarea {
+      width: 100%;
+      padding: 0.7rem;
+      margin-bottom: 1rem;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      font-size: 1rem;
+    }
+    button {
+      background: #007acc;
+      color: white;
+      border: none;
+      padding: 0.7rem 1.5rem;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+    button:hover {
+      background: #005fa3;
+    }
+    article {
+      border-bottom: 1px solid #ddd;
+      padding: 1rem 0;
+    }
+    article:last-child {
+      border-bottom: none;
+    }
+    .post-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .delete-btn {
+      background: crimson;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      padding: 0.3rem 0.6rem;
+      cursor: pointer;
+      font-size: 0.8rem;
+    }
+    .delete-btn:hover {
+      background: darkred;
+    }
+    .timestamp {
+      color: #666;
+      font-size: 0.9rem;
+    }
+    footer {
+      text-align: center;
+      color: #888;
+      margin-top: 3rem;
+      font-size: 0.9rem;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>📝 My Node.js Blog</h1>
+  </header>
+  <main>
+    <section id="create">
+      <h2>Create a New Post</h2>
+      <form id="postForm">
+        <input type="text" name="title" placeholder="Post title..." required />
+        <textarea name="content" placeholder="Write your content here..." rows="5" required></textarea>
+        <button type="submit">Publish Post</button>
+      </form>
+    </section>
+
+    <section id="posts">
+      <h2>Posts</h2>
+      ${posts.length === 0 ? "<p>No posts yet. Write one above!</p>" : ""}
+      ${posts.map(post => `
+        <article>
+          <div class="post-header">
+            <h3>${post.title}</h3>
+            <button class="delete-btn" data-id="${post.id}">Delete</button>
+          </div>
+          <p>${post.content}</p>
+          <div class="timestamp">📅 ${post.date}</div>
+        </article>
+      `).join("")}
+    </section>
+  </main>
+  <footer>Made with ❤️ using Node.js (Single-file version)</footer>
+
+  <script>
+    // Submit new post
+    document.getElementById('postForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const data = new URLSearchParams(new FormData(e.target));
+      const res = await fetch('/add', { method: 'POST', body: data });
+      if (res.ok) location.reload();
+    });
+
+    // Delete a post
+    document.querySelectorAll('.delete-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = btn.dataset.id;
+        if (confirm('Delete this post?')) {
+          await fetch('/delete/' + id, { method: 'POST' });
+          location.reload();
+        }
+      });
+    });
+  </script>
+</body>
+</html>
+  `);
+});
+
+// Add new post
+app.post("/add", (req, res) => {
+  const { title, content } = req.body;
+  if (!title || !content) return res.status(400).send("Missing fields");
+  const posts = getPosts();
+  posts.unshift({
+    id: Date.now().toString(),
+    title,
+    content,
+    date: new Date().toLocaleString(),
+  });
+  savePosts(posts);
+  res.redirect("/");
+});
+
+// Delete post
+app.post("/delete/:id", (req, res) => {
+  const id = req.params.id;
+  let posts = getPosts();
+  posts = posts.filter(p => p.id !== id);
+  savePosts(posts);
+  res.redirect("/");
+});
+
+app.listen(PORT, () => {
+  console.log(`🚀 Blogging platform running at http://localhost:${PORT}`);
+});
